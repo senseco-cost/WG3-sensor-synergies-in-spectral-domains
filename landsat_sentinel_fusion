@@ -1,0 +1,93 @@
+import os
+import sys
+from itertools import product
+from functools import partial
+import pandas as pd
+import geopandas as gpd
+import rasterio
+import seaborn as sns
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+module = '../src/'
+if module not in sys.path:
+    sys.path.append(module)
+
+from metadata import CASE_STUDIES, DATA_DIR
+from glcm import TEXTURES
+# Plotting style
+plt.style.use(['seaborn-paper', 'seaborn-whitegrid'])
+plt.rc('font', family='serif', serif='cmr10', size=12)
+plt.rc('axes', titlesize=12)
+plt.rc('axes', labelsize=12)
+plt.rc('xtick', labelsize=12)
+plt.rc('ytick', labelsize=12)
+plt.rc('legend', fontsize=12)
+plt.rc('figure', titlesize=12)
+plt.rc('text', usetex=False)
+SCHEMES = [
+    'optical',
+    'sar_vv_5x5',
+    'sar_vh_5x5',
+    'sar_vv_vh_5x5',
+    'sar_vv_vh_7x7',
+    'sar_vv_vh_9x9',
+    'sar_vv_vh_11x11',
+    'sar_vv_vh_5x5_9x9',
+    'sar_vv_vh_5x5_11x11',
+    'optical_sar',
+    'optical_sar_9x9',
+    'optical_sar_11x11'
+]
+
+SCHEMES_LABELS = [
+    'Optical',
+    'SAR VV 5x5',
+    'SAR VH 5x5',
+    'SAR VV VH 5x5',
+    'SAR VV VH 7x7',
+    'SAR VV VH 9x9',
+    'SAR VV VH 11x11',
+    'SAR VV VH 5x5 9x9',
+    'SAR VV VH 5x5 11x11',
+    'Fusion 5x5',
+    'Fusion 9x9',
+    'Fusion 11x11']
+CITIES = [case_study.name for case_study in CASE_STUDIES]
+LAND_COVERS = ['builtup', 'baresoil', 'lowveg', 'highveg']
+output_dir = os.path.abspath(os.path.join(DATA_DIR, '..', 'figures'))
+os.makedirs(output_dir, exist_ok=True)
+
+reference_polygons = pd.DataFrame(index=CITIES, columns=LAND_COVERS)
+for case_study in CASE_STUDIES:
+    data_dir = os.path.join(DATA_DIR, 'raw', 'reference', case_study.id)
+    os.chdir(data_dir)
+    for land_cover in LAND_COVERS:
+        reference_polygons.at[(case_study.name, land_cover)] = len(gpd.read_file(land_cover + '.shp'))
+  reference_pixels = pd.DataFrame(index=CITIES, columns=LAND_COVERS)
+for case_study in CASE_STUDIES:
+    data_dir = os.path.join(DATA_DIR, 'processed', 'reference', case_study.id)
+    os.chdir(data_dir)
+    with rasterio.open('reference.tif') as src:
+        for i, land_cover in enumerate(LAND_COVERS):
+            reference_pixels.at[(case_study.name, land_cover)] = np.count_nonzero(src.read(1) == i + 1)
+ display(reference_polygons)
+display(reference_pixels)
+score_per_scheme = pd.DataFrame(index=CITIES, columns=SCHEMES)
+for case_study, scheme in product(CASE_STUDIES, SCHEMES):
+    fp = os.path.join(DATA_DIR, 'output', case_study.id, scheme, 'metrics.csv')
+    metrics = pd.read_csv(fp, index_col=0)
+    score_per_scheme.at[(case_study.name, scheme)] = metrics.mean(axis=1).f1_score
+    score_per_scheme.columns = SCHEMES_LABELS
+score_per_scheme = score_per_scheme.astype(np.float).round(decimals=3)
+display(score_per_scheme)
+score_per_scheme.mean(axis=0).round(3)
+fig, ax = plt.subplots(figsize=(10, 4))
+sns.boxplot(ax=ax, data=score_per_scheme, orient='h', whis='range', width=0.80, linewidth=0.5, palette='Set2')
+ax.set_xticks([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.])
+ax.set_xlim((0.3, 1.))
+ax.set_xlabel('F1-score')
+fig.tight_layout()
+fig.savefig(os.path.join(output_dir, 'score_per_scheme_boxplot.svg'))
+fig.savefig(os.path.join(output_dir, 'score_per_scheme_boxplot.pdf'))
+fig.savefig(os.path.join(output_dir, 'score_per_scheme_boxplot.png'), dpi=600)
