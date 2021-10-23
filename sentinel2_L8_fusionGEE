@@ -1,0 +1,30 @@
+//import your geometry
+var Geometry
+//impoort l8
+//import S2
+
+var bandNamesOut = ['blue','green','red','nir','swir1','swir2'];
+var bandNamesl8 = ['B2','B3','B4','B5','B6','B7'];
+var bandNamesS2 = ['B2','B3','B4','B8','B11','B12']
+
+
+// data from table 4: Empirical cross sensor comparison of Sentinel-2A and 2B MSI, Landsat-8 OLI, and Landsat-7 ETM+ 
+//top of atmosphere spectral characteristics over the conterminous United States
+var slopes = [1.0946,1.0043,1.0524,0.8954,1.0049,1.0002];
+var intercepts = [-0.0107,0.0026,-0.0015,0.0033,0.0065,0.0046];
+
+s2 = s2.filterBounds(geometry).filterDate("2018-12-01","2018-12-21").sort("CLOUDY_PIXEL_PERCENTAGE")
+var imgs2 = ee.Image(s2.first()).select(bandNamesS2,bandNamesOut).divide(10000).float()
+print(imgs2)
+Map.addLayer(imgs2,{min:0,max:0.3000,bands:"red,green,blue"},"sentinel 2")
+
+l8 = l8.filterBounds(geometry).filterDate("2018-12-01","2018-12-21").sort("CLOUD_COVER")
+var imgl8 = ee.Image(l8.first()).select(bandNamesl8,bandNamesOut)
+Map.addLayer(imgl8,{min:0,max:0.3000,bands:"red,green,blue"},"landsat 8 original")
+
+var imgl8 = ee.Image(l8.first()).select(bandNamesl8,bandNamesOut).multiply(slopes).add(intercepts).float();
+Map.addLayer(imgl8,{min:0,max:0.3000,bands:"red,green,blue"},"landsat 8 image")
+print(imgl8)
+
+var merged = ee.ImageCollection([imgs2,imgl8]).mean()
+Map.addLayer(merged ,{min:0,max:0.3000,bands:"red,green,blue"},"merged image")
